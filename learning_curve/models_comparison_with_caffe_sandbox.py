@@ -9,19 +9,20 @@ log_path = "logs/"
 fig_path = "imgs/"
 db_path = "../mnist/"
 
-# Setting log environment variables before importing caffe
-import os
-os.environ["GLOG_log_dir"] = log_path # uncomment this line only if you use glog
-os.environ["GLOG_logtostderr"] = "1"
-
 # Import necessary modules
+import os
 import sys
 import subprocess
 import logging
 import time, datetime
 
+# Setting log environment variables before importing caffe
+os.environ["GLOG_log_dir"] = log_path # uncomment this line only if you use glog
+os.environ["GLOG_logtostderr"] = "1"
+
 # Caffe
 import numpy as np
+import matplotlib.pyplot as plt
 from numpy import *
 import caffe
 from caffe import layers as L, params as P
@@ -183,11 +184,11 @@ def train_test_net_python(solver_config_path, niter):
 # LEARNING CURVE
 # ###########################################################
 
+from pylab import rcParams
+rcParams['figure.figsize'] = 16, 6
+rcParams.update({'font.size': 15})
+
 def print_learning_curve(log_name, fig_name):
-    
-    from pylab import rcParams
-    rcParams['figure.figsize'] = 16, 6
-    rcParams.update({'font.size': 15})
 
     e = LearningCurve(log_name)
     e.parse()
