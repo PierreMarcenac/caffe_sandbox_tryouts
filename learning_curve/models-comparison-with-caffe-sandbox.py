@@ -216,8 +216,37 @@ def print_learning_curve(log_name, fig_name):
     plt.legend(loc='lower right')
     plt.grid()
     plt.savefig(fig_name)
-    pass
     
+def print_learning_curve_from_glog(net_prefix):
+    e = LearningCurve(log_path + "caffe.INFO")
+    e.parse()
+
+    for phase in [Phase.TRAIN, Phase.TEST]:
+        num_iter = e.list('NumIters', phase)
+        loss = e.list('loss', phase)
+        plt.plot(num_iter, loss, label='on %s set' % (phase.lower(),))
+
+        plt.xlabel('iteration')
+        # format x-axis ticks
+        ticks, _ = plt.xticks()
+        plt.xticks(ticks, ["%dK" % int(t/1000) for t in ticks])
+        plt.ylabel('loss')
+        plt.title(net_prefix+' on train and test sets')
+        plt.legend()
+
+    plt.figure()
+    num_iter = e.list('NumIters', phase)
+    acc = e.list('accuracy', phase)
+    plt.plot(num_iter, acc, label=e.name())
+
+    plt.xlabel('iteration')
+    plt.ylabel('accuracy')
+    plt.title(net_prefix+" on %s set" % (phase.lower(),))
+    plt.legend(loc='lower right')
+    plt.grid()
+    plt.show()
+
+
 # ###########################################################
 # WRITE TO LOG: log without glog which works poorly on python
 # ###########################################################
@@ -314,6 +343,7 @@ if __name__ == "__main__":
         process_name = net_prefix + "_" + time_stamp
         log_name = log_path + process_name + ".log"
         fig_name = fig_path + process_name + ".png"
+        print "Training process:", process_name
 
         # New cpp solver for each net
         from caffe.proto import caffe_pb2
@@ -327,7 +357,7 @@ if __name__ == "__main__":
         # Solve neural net and write to log
         out = OutputGrabber(sys.stderr)
         out.start()
-        train_test_net_command(solver_config_path)
+        train_test_net_python(solver_config_path)
         out.stop(log_name)
 
         # Plot
