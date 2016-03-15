@@ -10,6 +10,8 @@ gamma: 0.0001
 power: 0.75
 momentum: 0.9
 weight_decay: 0.0005
+snapshot: 5000
+snapshot_prefix: "snapshots/net0_snapshot"
 solver_mode: GPU
 random_seed: 831486
 type: "Nesterov"
