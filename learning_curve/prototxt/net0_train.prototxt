@@ -1,0 +1,79 @@
+layer {
+  name: "data"
+  type: "Data"
+  top: "data"
+  top: "label"
+  transform_param {
+    scale: 0.00392156862745
+  }
+  data_param {
+    source: "../mnist/mnist_train_lmdb"
+    batch_size: 64
+    backend: LMDB
+  }
+}
+layer {
+  name: "fc1"
+  type: "InnerProduct"
+  bottom: "data"
+  top: "fc1"
+  inner_product_param {
+    num_output: 50
+    weight_filler {
+      type: "xavier"
+    }
+  }
+}
+layer {
+  name: "sig1"
+  type: "Sigmoid"
+  bottom: "fc1"
+  top: "sig1"
+}
+layer {
+  name: "fc2"
+  type: "InnerProduct"
+  bottom: "sig1"
+  top: "fc2"
+  inner_product_param {
+    num_output: 50
+    weight_filler {
+      type: "xavier"
+    }
+  }
+}
+layer {
+  name: "sig2"
+  type: "Sigmoid"
+  bottom: "fc2"
+  top: "sig2"
+}
+layer {
+  name: "score"
+  type: "InnerProduct"
+  bottom: "sig2"
+  top: "score"
+  inner_product_param {
+    num_output: 10
+    weight_filler {
+      type: "xavier"
+    }
+  }
+}
+layer {
+  name: "accuracy"
+  type: "Accuracy"
+  bottom: "score"
+  bottom: "label"
+  top: "accuracy"
+  include {
+    phase: TEST
+  }
+}
+layer {
+  name: "loss"
+  type: "SoftmaxWithLoss"
+  bottom: "score"
+  bottom: "label"
+  top: "loss"
+}
