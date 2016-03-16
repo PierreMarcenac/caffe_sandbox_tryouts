@@ -184,10 +184,14 @@ if __name__ == '__main__':
 #     infer_to_h5_fixed_dims(net, ['ip2'], num_entries, "%s.h5" % fpath)
 #     infer_to_lmdb(net, ['ip2'], num_entries, "%s_lmdb" % fpath)
 
-    from os.path import expanduser
-         
-    fpath_net = expanduser('~/models/dark/mnist/t0/lenet_train_test.prototxt')
-    fpath_weights = expanduser('~/models/dark/mnist/t0/lenet_iter_10000.caffemodel')
+    base_path = '/mnt/scratch/pierre/caffe_sandbox_tryouts/'
+    def path_to(path):
+	return base_path + path
+    def work_on_training_set(fnc):
+	return fnc(path_to('mnist/mnist_train_lmdb'))
+
+    fpath_net = path_to('learning_curve/prototxt/lenet_train_test.prototxt')
+    fpath_weights = path_to('learning_curve/snapshots/lenet_iter_10000.caffemodel')
     
 #     x = response_to_lmdb(fpath_net, fpath_weights,
 #                      ['ip2', 'ip1'],
@@ -195,14 +199,13 @@ if __name__ == '__main__':
 
     net = caffe.Net(fpath_net, fpath_weights, caffe.TRAIN)
     keys = ['ip2', 'ip1']
-    x = infer_to_lmdb_cur(net, keys, 2,
-                      expanduser('~/models/dark/mnist/t0/Xmnist_%s_train_lmdb'))
+    x = infer_to_lmdb_cur(net, keys, 2, work_on_training_set(lambda x: x))
     
     print x
     
     import os
-    print [os.path.isdir(expanduser('~/models/dark/mnist/t0/Xmnist_%s_train_lmdb') % (k,)) for k in keys]
-    print [read_lmdb.num_entries(expanduser('~/models/dark/mnist/t0/Xmnist_%s_train_lmdb') % (k,)) for k in keys]
+    print work_on_training_set(os.path.isdir)
+    print work_on_training_set(read_lmdb.num_entries)
     #print [read_lmdb.read_values(expanduser('~/models/dark/mnist/t0/Xmnist_%s_train_lmdb') % (k,)) for k in keys]
 
 #     with h5py.File(fpath, "w") as f:
