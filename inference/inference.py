@@ -172,19 +172,8 @@ def response_to_lmdb(fpath_net,
 
 if __name__ == '__main__':
     
-#     from os.path import expanduser
-#          
-#     fpath_net = expanduser('~/models/dark/mnist/t0/lenet_train_test_inf.prototxt')
-#     fpath_weights = expanduser('~/models/dark/mnist/t0/lenet_iter_10000.caffemodel')
-#     net = caffe.Net(fpath_net, fpath_weights, caffe.TRAIN)
-#      
-#     fpath = expanduser('~/models/dark/mnist/t0/mnist_ip2_train')
-#     num_entries = read_lmdb.num_entries(expanduser('~/data/mnist/mnist_train_lmdb'))
-#     
-#     infer_to_h5_fixed_dims(net, ['ip2'], num_entries, "%s.h5" % fpath)
-#     infer_to_lmdb(net, ['ip2'], num_entries, "%s_lmdb" % fpath)
-
     base_path = '/mnt/scratch/pierre/caffe_sandbox_tryouts/'
+    
     def path_to(path):
 	return base_path + path
 
@@ -192,30 +181,16 @@ if __name__ == '__main__':
     fpath_weights = path_to('learning_curve/snapshots/net0_snapshot_iter_10000.caffemodel')
     fpath_db = path_to('inference/mnist_%s_train_lmdb')
     
-#     x = response_to_lmdb(fpath_net, fpath_weights,
-#                      ['ip2', 'ip1'],
-#                      expanduser('~/models/dark/mnist/t0/mnistX_'))
-
     net = caffe.Net(fpath_net, fpath_weights, caffe.TRAIN)
     keys = ['fc2', 'fc1']
     x = infer_to_lmdb_cur(net, keys, 2, fpath_db)
     
-    print x
-    
     import os
+    print 'Do lmdbs exist?'
     print [os.path.isdir(fpath_db % (k,)) for k in keys]
+    print 'Number of entries in lmdbs:'
     print [read_lmdb.num_entries(fpath_db % (k,)) for k in keys]
-    #print [read_lmdb.read_values(expanduser('~/models/dark/mnist/t0/Xmnist_%s_train_lmdb') % (k,)) for k in keys]
 
-#     with h5py.File(fpath, "w") as f:
-#     
-#         f['a'] = 0
-#         
-#         
-#         f['b'] = [1, 2]
-#         f['c'] = np.arange(3)
-#         f['d'] = [np.array([[1,2],[4,5]], dtype=float), np.array([[1,2],[4, 5]], dtype=float)+10]
-            
-    #infer_to_h5(net, 1, ['accuracy'], fpath)
+    # Here you need to compute accuracy, roc, precision recall, confusion matrix
     
     pass
