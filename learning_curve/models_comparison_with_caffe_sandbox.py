@@ -18,7 +18,7 @@ import time, datetime
 
 # Setting log environment variables before importing caffe
 #os.environ["GLOG_log_dir"] = log_path # uncomment this line only if using glog
-os.environ["GLOG_logtostderr"] = "1" # uncomment this line only if using regular log
+os.environ["GLOG_logtostderr"] = "1" # uncomment this line only if using custom log
 
 # Caffe
 import numpy as np
@@ -26,6 +26,7 @@ from numpy import *
 import matplotlib.pyplot as plt
 import caffe
 from caffe import layers as L, params as P
+from caffe.proto import caffe_pb2
 
 # Caffe Sandbox
 from eval.learning_curve import LearningCurve
@@ -102,13 +103,13 @@ def net2(lmdb, batch_size):
 # TRAIN/TEST/SOLVE
 # ###########################################################
 
-def make_train_test(net, train_net_path, test_net_path):
+def make_train_test(net, train_net_path, fpath_train_db, test_net_path, fpath_test_db):
     
     with open(train_net_path, 'w') as f:
-        f.write(str(net(db_path+"mnist_train_lmdb", 64)))
+        f.write(str(net(fpath_train_db, 64)))
         
     with open(test_net_path, 'w') as f:
-        f.write(str(net(db_path+"mnist_test_lmdb", 100)))
+        f.write(str(net(fpath_test_db, 100)))
 
 def make_solver(s, net_prefix, train_net_path, test_net_path, solver_config_path):
     
@@ -176,7 +177,7 @@ def train_test_net_python(solver_config_path, niter):
         solver.step(1)
 
         # Display iteration
-        if it % niter/10 == 0:
+        if it % (niter/10) == 0:
             print "Iteration", it, "testing..."
             
 
@@ -188,7 +189,7 @@ from pylab import rcParams
 rcParams['figure.figsize'] = 16, 6
 rcParams.update({'font.size': 15})
 
-def print_learning_curve(log_name, fig_name, glog=False):
+def print_learning_curve(log_name, fig_name, inline=False):
 
     e = LearningCurve(log_name)
     e.parse()
@@ -216,11 +217,11 @@ def print_learning_curve(log_name, fig_name, glog=False):
     plt.title(net_prefix+" on %s set" % (phase.lower(),))
     plt.legend(loc='lower right')
     plt.grid()
-    if glog==True:
+    if inline:
         plt.show()
     else:
         plt.savefig(fig_name)
-    
+
 
 # ###########################################################
 # WRITE TO LOG: log without glog which works poorly on python
@@ -312,6 +313,10 @@ if __name__ == "__main__":
     # Time stamp
     ts = time.time()
     time_stamp = datetime.datetime.fromtimestamp(ts).strftime('%Y%m%d_%H%M%S')
+    
+    # Path to lmdb
+    fpath_train_db = db_path+"mnist_train_lmdb"
+    fpath_test_db = db_path+"mnist_test_lmdb"
 
     for (net, net_prefix) in nets:
         # Log/fig names with time stamp
@@ -321,12 +326,11 @@ if __name__ == "__main__":
         print "Training process:", process_name
 
         # New cpp solver for each net
-        from caffe.proto import caffe_pb2
         s = caffe_pb2.SolverParameter()
 
         # Make prototxts
         train_net_path, test_net_path, solver_config_path = get_locations(net_prefix)
-        make_train_test(net, train_net_path, test_net_path)
+        make_train_test(net, train_net_path, fpath_train_db, test_net_path, fpath_test_db)
         make_solver(s, net_prefix, train_net_path, test_net_path, solver_config_path)
 
         # Solve neural net and write to log
