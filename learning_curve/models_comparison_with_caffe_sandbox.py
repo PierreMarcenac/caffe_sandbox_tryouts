@@ -119,8 +119,8 @@ def make_solver(s, net_prefix, train_net_path, test_net_path, solver_config_path
     # Locations of the train/test networks
     s.train_net = train_net_path
     s.test_net.append(test_net_path)
-    s.test_interval = 10  # Test after every 500 training iterations.
-    s.test_iter.append(100) # Test on 100 batches each time we test.
+    s.test_interval = 100  # Test after every 'test_interval' training iterations.
+    s.test_iter.append(100) # Test on 'test_iter' batches each time we test.
 
     s.max_iter = 10000 # Max training iterations
 
@@ -162,23 +162,48 @@ def train_test_net_command(solver_config_path):
                                                       solver=solver_config_path)
     subprocess.call(command, shell=True)
     
-def train_test_net_python(solver_config_path, niter):
-    # Pythonic alternative to previous method
-    
+def train_test_net_python(solver_config_path, niter, log_name, accuracy=False):
+    # Pythonic alternative to previous method capturing stderr and logging it to a custom log file
+    out = start_output()
     # Work on GPU and load solver
     caffe.set_device(0)
     caffe.set_mode_gpu()
     solver = None
     solver = caffe.get_solver(solver_config_path)
-    
+
+    y_true, y_pred = [], []
+
     for it in range(niter):
-
-        # SGD
+	# Iterate
         solver.step(1)
+	# Regularly compute accuracy on test set
+	if accuracy:
+	    if it % 100 == 0:
+		log_accuracy = "IOCustom] Test net output #1: accuracy = {}\n"
+		value_accuracy = 1-hamming_loss_test(solver)
+		sys.stderr.write(log_accuracy.format(value_accuracy))
+	# Regularly print iteration
+        if it % 100 == 0:
+	    print "Iteration", it
+	# Regularly purge stderr
+	if it % 1000 == 0:
+	    out = purge_output(out, log_name)
+    # Break output stream and write to log
+    stop_output(out, log_name)
 
-        # Display iteration
-        if it % (niter/10) == 0:
-            print "Iteration", it, "testing..."
+from sklearn.metrics import hamming_loss
+
+def hamming_loss_test(solver):
+    solver.test_nets[0].forward()
+    y_true = solver.test_nets[0].blobs['label'].data
+    y_prob = np.array([softmax(label) for label in solver.test_nets[0].blobs['score'].data])
+    y_pred = np.array([[0.+(prob==np.max(label)) for prob in label] for label in y_prob])
+    return hamming_loss(y_true, y_pred)
+
+def softmax(x):
+    # Softmax on vector x
+    e_x = np.exp(x)
+    return e_x / e_x.sum()
             
 
 # ###########################################################
@@ -224,11 +249,25 @@ def print_learning_curve(log_name, fig_name, inline=False):
 
 
 # ###########################################################
-# WRITE TO LOG: log without glog which works poorly on python
+# WRITE TO LOG: log without glog which works poorly in python
 # ###########################################################
     
 import os
 import sys
+
+def start_output():
+    out = OutputGrabber()
+    out.start()
+    return out
+
+def purge_output(out, log_name):
+    stop_output(out, log_name)
+    new_out = start_output()
+    return new_out
+
+def stop_output(out, log_name):
+    out.stop(log_name)
+    pass
 
 class OutputGrabber(object):
     """
@@ -236,7 +275,7 @@ class OutputGrabber(object):
     """
     escape_char = "\b"
 
-    def __init__(self, stream):
+    def __init__(self, stream=sys.stderr):
         self.origstream = stream
         self.origstreamfd = self.origstream.fileno()
         self.capturedtext = ""
@@ -251,7 +290,7 @@ class OutputGrabber(object):
         self.capturedtext = ""
         # Save a copy of the stream
         self.streamfd = os.dup(self.origstreamfd)
-        # Replace the Original stream with our write pipe
+        # Replace the original stream with our write pipe
         os.dup2(self.pipe_in, self.origstreamfd)
         pass
 
@@ -270,7 +309,7 @@ class OutputGrabber(object):
         # Restore the original stream
         os.dup2(self.streamfd, self.origstreamfd)
         # Write to file filename
-        f = open(filename, "w")
+        f = open(filename, "a")
         f.write(self.capturedtext)
         f.close()
         pass
@@ -288,17 +327,7 @@ class OutputGrabber(object):
                 break
             self.capturedtext += data
         pass
-    
-    def write_output(self):
-        """
-        Write the stream data to a log file
-        """
-        # Time stamp
-        ts = time.time()
-        time_stamp = datetime.datetime.fromtimestamp(ts).strftime('%Y%m%d_%H%M%S')
-        # Log name
-        log_name = "mnist/logs/"+net+"_"+time_stamp+".log"
-        
+
         
 # ###########################################################
 # MAIN
@@ -334,10 +363,4 @@ if __name__ == "__main__":
         make_solver(s, net_prefix, train_net_path, test_net_path, solver_config_path)
 
         # Solve neural net and write to log
-        out = OutputGrabber(sys.stderr)
-        out.start()
-        train_test_net_python(solver_config_path, 10000)
-        out.stop(log_name)
-
-        # Plot
-        print_learning_curve(log_name, process_name)
+        train_test_net_command(solver_config_path)
