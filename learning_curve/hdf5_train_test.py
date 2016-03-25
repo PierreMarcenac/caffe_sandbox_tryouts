@@ -1,7 +1,7 @@
 # MNIST - MULTI-CLASS MULTI-LABEL CLASSIFICATION
 
 # Convert input lmdb files to hdf5 files
-from models_comparison_with_caffe_sandbox import *
+from mnist_train_test import *
 import lmdb, h5py
 from caffe.io import datum_to_array
 
@@ -9,7 +9,7 @@ def silent_remove(filename):
     try:
         os.remove(filename)
     except OSError:
-	pass
+        pass
 
 # Scalar is transformed to a vector of length lg with a 1 at position scalar and zeros otherwise
 def vectorize(scalar, lg):
@@ -36,33 +36,19 @@ def make_hdf5(phase, size):
     # write and normalize
     for key, value in lmdb_cursor:
         datum.ParseFromString(value)
-	key = int(key)
+        key = int(key)
         label = datum.label
         image = caffe.io.datum_to_array(datum)
- 	image = image/255.
-	# write images in hdf5 db specifying type
+        image = image/255.
+        # write images in hdf5 db specifying type
         f["data"][key] = image.astype("float32")
-	# write label in hdf5 db specifying type
-	f["label"][key] = np.array(vectorize(label, 10)).astype("float32")
+        # write label in hdf5 db specifying type
+        f["label"][key] = np.array(vectorize(label, 10)).astype("float32")
     # close all working files/environments
     f.close()
     lmdb_cursor.close()
     lmdb_env.close()
     pass
-
-train_size = 60000
-test_size = 10000
-train_name = "train"
-test_name = "test"
-
-# Generate database?
-generate_database = False
-if generate_database:
-    make_hdf5(train_name, train_size)
-    print "Copy of train set in hdf5: done"
-    make_hdf5(test_name, test_size)
-    print "Copy of test set in hdf5: done"
-
 
 # Net architecture to handle hdf5 inputs (use SigmoidCrossEntropyLoss)
 def net_hdf5(hdf5, batch_size):
@@ -76,34 +62,50 @@ def net_hdf5(hdf5, batch_size):
     n.relu2 = L.ReLU(n.pool2, in_place=True)
     n.fc1 =   L.InnerProduct(n.relu2, num_output=500, weight_filler=dict(type='xavier'))
     n.score =   L.InnerProduct(n.fc1, num_output=10, weight_filler=dict(type='xavier'))
-    #n.accuracy = L.Accuracy(n.score, n.label, include=[dict(phase=caffe.TEST)])
     n.loss =  L.SigmoidCrossEntropyLoss(n.score, n.label)
     return n.to_proto()
 
-# Time stamp
-ts = time.time()
-time_stamp = datetime.datetime.fromtimestamp(ts).strftime('%Y%m%d_%H%M%S')
+if __name__=="__main__":
 
-# Log/fig names with time stamp
-net_prefix = "net_hdf5"
-process_name = net_prefix + "_" + time_stamp
-log_name = log_path + process_name + ".log"
-print "Training process:", process_name
+# MAKE HDF5 DATABASE
+    train_size = 60000
+    test_size = 10000
+    train_name = "train"
+    test_name = "test"
 
-# New cpp solver
-s = caffe_pb2.SolverParameter()
+    # Generate database?
+    generate_database = False
+    if generate_database:
+        make_hdf5(train_name, train_size)
+        print "Copy of train set in hdf5: done"
+        make_hdf5(test_name, test_size)
+        print "Copy of test set in hdf5: done"
 
-# Make prototxts
-train_net_path, test_net_path, solver_config_path = get_locations(net_prefix)
-fpath_train_list = (fpath_db+"h5list").format("train", "hdf5")
-fpath_test_list = (fpath_db+"h5list").format("test", "hdf5")
-with open(train_net_path, "w") as f:
-    f.write(str(net_hdf5(fpath_train_list, 64)))
-with open(test_net_path, "w") as f:
-    f.write(str(net_hdf5(fpath_test_list, 100)))
-make_solver(s, net_prefix, train_net_path, test_net_path, solver_config_path)
+# TRAIN/TEST ON DATABASE
+    # Time stamp
+    ts = time.time()
+    time_stamp = datetime.datetime.fromtimestamp(ts).strftime('%Y%m%d_%H%M%S')
 
-# Solve neural net and write to log
-print "Start training"
-train_test_net_python(solver_config_path, 1000, log_name, accuracy=True)
-print "Stop training"
+    # Log/fig names with time stamp
+    net_prefix = "net_hdf5"
+    process_name = net_prefix + "_" + time_stamp
+    log_name = log_path + "caffe_" + process_name + ".log"
+    print "Training process:", process_name
+
+    # New cpp solver
+    s = caffe_pb2.SolverParameter()
+
+    # Make prototxts
+    train_net_path, test_net_path, solver_config_path = get_locations(net_prefix)
+    fpath_train_list = (fpath_db+"h5list").format("train", "hdf5")
+    fpath_test_list = (fpath_db+"h5list").format("test", "hdf5")
+    with open(train_net_path, "w") as f:
+        f.write(str(net_hdf5(fpath_train_list, 64)))
+    with open(test_net_path, "w") as f:
+        f.write(str(net_hdf5(fpath_test_list, 100)))
+    make_solver(s, net_prefix, train_net_path, test_net_path, solver_config_path)
+
+    # Solve neural net and write to log
+    print "Start training"
+    train_test_net_python(solver_config_path, 10000, log_name, accuracy=True)
+    print "Stop training"

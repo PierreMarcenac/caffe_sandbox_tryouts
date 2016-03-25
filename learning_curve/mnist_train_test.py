@@ -1,6 +1,6 @@
-# ###########################################################
+#############################################################
 # ENVIRONMENT
-# ###########################################################
+#############################################################
 
 # Location of Caffe and logging files and database
 caffe_root = "$CAFFE_ROOT/"
@@ -17,6 +17,7 @@ import logging
 import time, datetime
 
 # Setting log environment variables before importing caffe
+os.environ["GLOG_minloglevel"] = "0"
 #os.environ["GLOG_log_dir"] = log_path # uncomment this line only if using glog
 os.environ["GLOG_logtostderr"] = "1" # uncomment this line only if using custom log
 
@@ -33,9 +34,9 @@ from eval.learning_curve import LearningCurve
 from eval.eval_utils import Phase
 import eval.log_utils as lu
 
-# ###########################################################
+#############################################################
 # DATA
-# ###########################################################
+#############################################################
 
 # Data already converted to lmdb
 
@@ -47,9 +48,9 @@ def get_locations(prefix_net):
     return train_net_path, test_net_path, solver_config_path
 
 
-# ###########################################################
+#############################################################
 # ARCHITECTURE
-# ###########################################################
+#############################################################
 
 # Network 0
 # INPUT -> FC -> FC -> SIGMOID
@@ -99,9 +100,9 @@ def net2(lmdb, batch_size):
     return n.to_proto()
 
 
-# ###########################################################
+#############################################################
 # TRAIN/TEST/SOLVE
-# ###########################################################
+#############################################################
 
 def make_train_test(net, train_net_path, fpath_train_db, test_net_path, fpath_test_db):
     
@@ -164,34 +165,52 @@ def train_test_net_command(solver_config_path):
     
 def train_test_net_python(solver_config_path, niter, log_name, accuracy=False):
     # Pythonic alternative to previous method capturing stderr and logging it to a custom log file
-    out = start_output()
+    out = start_output(init=True)
     # Work on GPU and load solver
     caffe.set_device(0)
     caffe.set_mode_gpu()
     solver = None
     solver = caffe.get_solver(solver_config_path)
+    # Log solving
+    log_solving = log_entry("Solving")
+    sys.stderr.write(log_solving)
 
     y_true, y_pred = [], []
 
     for it in range(niter):
-	# Iterate
+        # Iterate
         solver.step(1)
-	# Regularly compute accuracy on test set
-	if accuracy:
-	    if it % 100 == 0:
-		log_accuracy = "IOCustom] Test net output #1: accuracy = {}\n"
-		value_accuracy = 1-hamming_loss_test(solver)
-		sys.stderr.write(log_accuracy.format(value_accuracy))
-	# Regularly print iteration
+        # Regularly compute accuracy on test set
+        if accuracy:
+            if it % 100 == 0:
+                log_accuracy = log_entry("Test net output #1: accuracy = {}")
+                value_accuracy = 1-hamming_loss_test(solver)
+                sys.stderr.write(log_accuracy.format(value_accuracy))
+        # Regularly print iteration
         if it % 100 == 0:
-	    print "Iteration", it
-	# Regularly purge stderr
-	if it % 1000 == 0:
-	    out = purge_output(out, log_name)
+            print "Iteration", it
+        # Regularly purge stderr/output grabber
+        if it % 1000 == 0:
+            out = purge_output(out, log_name)
     # Break output stream and write to log
     stop_output(out, log_name)
 
+
+#############################################################
+# UTILS FOR CUSTOM LOGGING
+#############################################################
+
 from sklearn.metrics import hamming_loss
+
+def log_entry(text):
+    now = time.time()
+    monthday = datetime.datetime.fromtimestamp(now).strftime('%m%d')
+    time_stamp = datetime.datetime.fromtimestamp(now).strftime('%H:%M:%S')
+    ms = "."+str('%06d' % int((now - int(now)) * 1000000))
+    entry = "I{monthday} {time_stamp}  0000 main.py:00] {text}\n".format(monthday=monthday,
+                                                                          time_stamp=time_stamp+ms,
+                                                                          text=text)
+    return entry
 
 def hamming_loss_test(solver):
     solver.test_nets[0].forward()
@@ -206,15 +225,15 @@ def softmax(x):
     return e_x / e_x.sum()
             
 
-# ###########################################################
+#############################################################
 # LEARNING CURVE
-# ###########################################################
+#############################################################
 
 from pylab import rcParams
 rcParams['figure.figsize'] = 16, 6
 rcParams.update({'font.size': 15})
 
-def print_learning_curve(log_name, fig_name, inline=False):
+def print_learning_curve(net_prefix, log_name, fig_name, inline=False):
 
     e = LearningCurve(log_name)
     e.parse()
@@ -248,16 +267,16 @@ def print_learning_curve(log_name, fig_name, inline=False):
         plt.savefig(fig_name)
 
 
-# ###########################################################
+#############################################################
 # WRITE TO LOG: log without glog which works poorly in python
-# ###########################################################
+#############################################################
     
 import os
 import sys
 
-def start_output():
+def start_output(init=False):
     out = OutputGrabber()
-    out.start()
+    out.start(init)
     return out
 
 def purge_output(out, log_name):
@@ -283,7 +302,7 @@ class OutputGrabber(object):
         self.pipe_out, self.pipe_in = os.pipe()
         pass
 
-    def start(self):
+    def start(self, init=False):
         """
         Start capturing the stream data.
         """
@@ -292,6 +311,11 @@ class OutputGrabber(object):
         self.streamfd = os.dup(self.origstreamfd)
         # Replace the original stream with our write pipe
         os.dup2(self.pipe_in, self.origstreamfd)
+        # Patch log file with time stamp on first line if initialization
+        if init:
+            time_stamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y/%m/%d %H-%M-%S')
+            log_beginning = "Log file created at: {}\n".format(time_stamp)
+            self.origstream.write(log_beginning)
         pass
 
     def stop(self, filename):
@@ -329,9 +353,9 @@ class OutputGrabber(object):
         pass
 
         
-# ###########################################################
+#############################################################
 # MAIN
-# ###########################################################
+#############################################################
 
 if __name__ == "__main__":
     
@@ -350,7 +374,7 @@ if __name__ == "__main__":
     for (net, net_prefix) in nets:
         # Log/fig names with time stamp
         process_name = net_prefix + "_" + time_stamp
-        log_name = log_path + process_name + ".log"
+        log_name = log_path + "caffe_" + process_name + ".log"
         fig_name = fig_path + process_name + ".png"
         print "Training process:", process_name
 
@@ -362,5 +386,6 @@ if __name__ == "__main__":
         make_train_test(net, train_net_path, fpath_train_db, test_net_path, fpath_test_db)
         make_solver(s, net_prefix, train_net_path, test_net_path, solver_config_path)
 
-        # Solve neural net and write to log
-        train_test_net_command(solver_config_path)
+        # Solve neural net and write to log (uncomment command or python)
+        # train_test_net_command_command(solver_config_path)
+        train_test_net_python(solver_config_path, 1000, log_name, accuracy=False)

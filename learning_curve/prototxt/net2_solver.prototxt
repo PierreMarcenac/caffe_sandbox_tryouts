@@ -1,7 +1,7 @@
 train_net: "prototxt/net2_train.prototxt"
 test_net: "prototxt/net2_test.prototxt"
 test_iter: 100
-test_interval: 10
+test_interval: 100
 base_lr: 0.01
 display: 10
 max_iter: 10000
@@ -10,8 +10,6 @@ gamma: 0.0001
 power: 0.75
 momentum: 0.9
 weight_decay: 0.0005
-snapshot: 5000
-snapshot_prefix: "snapshots/net2_snapshot"
 solver_mode: GPU
 random_seed: 831486
 type: "Nesterov"
