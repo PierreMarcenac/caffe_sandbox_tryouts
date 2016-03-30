@@ -48,37 +48,44 @@ def main():
     def path_to(path):
         return base_path + path
     base_path = '/mnt/scratch/pierre/caffe_sandbox_tryouts/'
-    fpath_net = path_to('learning_curve/prototxt/net1_test.prototxt')
+    fpath_net = path_to('learning_curve/prototxt/net1_train.prototxt')
     fpath_weights = path_to('learning_curve/snapshots/net1_snapshot_iter_10000.caffemodel')
     fpath_db = path_to('inference/mnist_%s_train_lmdb')
     fpath_h5 = path_to('inference/db.h5')
 
-    # Make 1000 inferences and storing keys in an hdf5 if build_db activated
-    build_db = True # change to True when needed
+    # Make n inferences and storing keys in an hdf5 if build_db activated
+    build_db = False # change to True when needed
     if build_db:
-        net = caffe.Net(fpath_net, fpath_weights, caffe.TEST) # or caffe.TRAIN
+        net = caffe.Net(fpath_net, fpath_weights, caffe.TRAIN) # caffe.TEST or caffe.TRAIN?
         keys = ["label", "score"]
-        n = 50
-        infer_to_h5_fixed_dims(net, keys, n, fpath_h5, preserve_batch=True)
+        n = 1000
+        x = infer_to_h5_fixed_dims(net, keys, n, fpath_h5, preserve_batch=False)
 
     # Define y_true, y_score and y_pred
     f = h5py.File(fpath_h5, "r")
-    y_true = f["label"].value[0]
-    y_score = f["score"].value[0]
+    y_true = f["label"][:]
+    y_score = f["score"][:]
     y_pred = [np.argmax(y) for y in y_score]
 
     # Accuracy
     from sklearn.metrics import accuracy_score
-    print "y_true", y_true
-    print "y_pred", y_pred
-    print "y_score", y_score
     accuracy = accuracy_score(y_true, y_pred)
-    print "Accuracy:", accuracy
+    print "Accuracy =", accuracy
 
     # ROC curve
     classes = range(10)
+    print "ROC curve on scores without softmax:"
     plot_roc_curve(y_true, y_score, classes)
     plt.show()
+    #### PROVISOIRE JUST TO TEST SOFTMAX #######################################
+    def softmax(x):
+        e_x = np.exp(x)
+        return e_x / e_x.sum()
+    y_score_softmax = np.array([softmax(score) for score in y_score])
+    print "ROC curve on scores with softmax:"
+    plot_roc_curve(y_true, y_score_softmax, classes)
+    plt.show()
+    #### FIN PROVISOIRE ########################################################
 
     # Scikit-learn report
     from sklearn.metrics import classification_report
@@ -89,6 +96,8 @@ def main():
     from sklearn.metrics import confusion_matrix
     confusion = confusion_matrix(y_true, y_pred, labels=classes)
     print "Confusion matrix:\n", confusion
+
+    pass
 
 if __name__=="__main__":
     main()
