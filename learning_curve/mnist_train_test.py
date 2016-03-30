@@ -23,11 +23,11 @@ os.environ["GLOG_logtostderr"] = "1" # uncomment this line only if using custom 
 
 # Caffe
 import numpy as np
-from numpy import *
 import matplotlib.pyplot as plt
 import caffe
 from caffe import layers as L, params as P
 from caffe.proto import caffe_pb2
+from accuracy import hamming_loss_test
 
 # Caffe Sandbox
 from eval.learning_curve import LearningCurve
@@ -40,8 +40,10 @@ import eval.log_utils as lu
 
 # Data already converted to lmdb
 
-# Relative location of train/test networks and solver
 def get_locations(prefix_net):
+    """
+    Relative location of train/test networks and solver
+    """
     train_net_path = "prototxt/"+prefix_net+"_train.prototxt"
     test_net_path = "prototxt/"+prefix_net+"_test.prototxt"
     solver_config_path = "prototxt/"+prefix_net+"_solver.prototxt"
@@ -52,9 +54,11 @@ def get_locations(prefix_net):
 # ARCHITECTURE
 #############################################################
 
-# Network 0
 # INPUT -> FC -> FC -> SIGMOID
 def net0(lmdb, batch_size):
+    """
+    Network 0: oversimplified architecture
+    """
     n = caffe.NetSpec()
     n.data, n.label = L.Data(batch_size=batch_size, backend=P.Data.LMDB, source=lmdb,
                              transform_param=dict(scale=1./255), ntop=2)
@@ -67,9 +71,11 @@ def net0(lmdb, batch_size):
     n.loss = L.SoftmaxWithLoss(n.score, n.label)
     return n.to_proto()
 
-# Network 1
 # INPUT -> CONV -> RELU -> FC
 def net1(lmdb, batch_size):
+    """
+    Network 1: standard architecture
+    """
     n = caffe.NetSpec()
     n.data, n.label = L.Data(batch_size=batch_size, backend=P.Data.LMDB, source=lmdb,
                              transform_param=dict(scale=1./255), ntop=2)
@@ -81,9 +87,11 @@ def net1(lmdb, batch_size):
     n.loss = L.SoftmaxWithLoss(n.score, n.label)
     return n.to_proto()
 
-# Network 2
 # INPUT -> [CONV -> POOL -> RELU]*2 -> FC -> RELU -> FC
 def net2(lmdb, batch_size):
+    """
+    Network 2: overcomplicated architecture
+    """
     n = caffe.NetSpec()
     n.data, n.label = L.Data(batch_size=batch_size, backend=P.Data.LMDB, source=lmdb,
                              transform_param=dict(scale=1./255), ntop=2)
@@ -105,67 +113,64 @@ def net2(lmdb, batch_size):
 #############################################################
 
 def make_train_test(net, train_net_path, fpath_train_db, test_net_path, fpath_test_db):
-    
+    """
+    Write train/test files from python to protocol buffers
+    """
     with open(train_net_path, 'w') as f:
         f.write(str(net(fpath_train_db, 64)))
-        
+
     with open(test_net_path, 'w') as f:
         f.write(str(net(fpath_test_db, 100)))
 
 def make_solver(s, net_prefix, train_net_path, test_net_path, solver_config_path):
-    
+    """
+    Standard solver for net1
+    """
     # Randomization in training
     s.random_seed = 0xCAFFE
-
     # Locations of the train/test networks
     s.train_net = train_net_path
     s.test_net.append(test_net_path)
     s.test_interval = 100  # Test after every 'test_interval' training iterations.
     s.test_iter.append(100) # Test on 'test_iter' batches each time we test.
-
     s.max_iter = 10000 # Max training iterations
-
     # Type of solver
     s.type = "Nesterov" # "SGD", "Adam", and "Nesterov"
-
     # Initial learning rate and momentum
     s.base_lr = 0.01
     s.momentum = 0.9
     s.weight_decay = 5e-4
-
     # Learning rate changes
     s.lr_policy = 'inv'
     s.gamma = 0.0001
     s.power = 0.75
-
     # Display current training loss and accuracy every 10 iterations
     s.display = 10
-
-    # Snapshots files (uncomment to get it)
-    #s.snapshot = 5000
-    #s.snapshot_prefix = "mnist/snapshots/"+net_prefix+"_snapshot"
-
     # Use GPU to train
     s.solver_mode = caffe_pb2.SolverParameter.GPU
-
     # Write the solver to a temporary file and return its filename
     with open(solver_config_path, "w") as f:
         f.write(str(s))
-    
-def train_test_net_command(solver_config_path):
 
+def train_test_net_command(solver_config_path):
+    """
+    Train/test process launching cpp files from shell
+    """
     # Load solver
     solver = None
     solver = caffe.get_solver(solver_config_path)
-    
+
     # Launch training command
     command = "{caffe} train -solver {solver}".format(caffe=caffe_root + caffe_path,
                                                       solver=solver_config_path)
     subprocess.call(command, shell=True)
-    
+
 def train_test_net_python(solver_config_path, niter, log_name, accuracy=False):
-    # Pythonic alternative to previous method capturing stderr and logging it to a custom log file
-    out = start_output(init=True)
+    """
+    Pythonic alternative to train/test process capturing stderr
+    and logging it to a custom log file
+    """
+    out = start_output(init=True) # comment this line for explicit debugging
     # Work on GPU and load solver
     caffe.set_device(0)
     caffe.set_mode_gpu()
@@ -197,35 +202,6 @@ def train_test_net_python(solver_config_path, niter, log_name, accuracy=False):
 
 
 #############################################################
-# UTILS FOR CUSTOM LOGGING
-#############################################################
-
-from sklearn.metrics import hamming_loss
-
-def log_entry(text):
-    now = time.time()
-    monthday = datetime.datetime.fromtimestamp(now).strftime('%m%d')
-    time_stamp = datetime.datetime.fromtimestamp(now).strftime('%H:%M:%S')
-    ms = "."+str('%06d' % int((now - int(now)) * 1000000))
-    entry = "I{monthday} {time_stamp}  0000 main.py:00] {text}\n".format(monthday=monthday,
-                                                                          time_stamp=time_stamp+ms,
-                                                                          text=text)
-    return entry
-
-def hamming_loss_test(solver):
-    solver.test_nets[0].forward()
-    y_true = solver.test_nets[0].blobs['label'].data
-    y_prob = np.array([softmax(label) for label in solver.test_nets[0].blobs['score'].data])
-    y_pred = np.array([[0.+(prob==np.max(label)) for prob in label] for label in y_prob])
-    return hamming_loss(y_true, y_pred)
-
-def softmax(x):
-    # Softmax on vector x
-    e_x = np.exp(x)
-    return e_x / e_x.sum()
-            
-
-#############################################################
 # LEARNING CURVE
 #############################################################
 
@@ -234,7 +210,9 @@ rcParams['figure.figsize'] = 16, 6
 rcParams.update({'font.size': 15})
 
 def print_learning_curve(net_prefix, log_name, fig_name, inline=False):
-
+    """
+    Print learning curve inline (for jupiter notebook) or by saving it
+    """
     e = LearningCurve(log_name)
     e.parse()
 
@@ -268,29 +246,62 @@ def print_learning_curve(net_prefix, log_name, fig_name, inline=False):
 
 
 #############################################################
+# UTILS FOR CUSTOM LOGGING
+#############################################################
+
+def make_time_stamp(pattern):
+    """
+    Time stamp with explicit string pattern
+    """
+    now = time.time()
+    return datetime.datetime.fromtimestamp(now).strftime(pattern)
+
+def log_entry(text):
+    """
+    Standardized log entries for glog
+    """
+    monthday = make_time_stamp('%m%d')
+    time_stamp = make_time_stamp('%H:%M:%S')
+    now = time.time()
+    ms = "."+str('%06d' % int((now - int(now)) * 1000000))
+    line_form = "I{monthday} {time_stamp}  0000 main.py:00] {text}\n"
+    entry = line_form.format(monthday=monthday, time_stamp=time_stamp+ms, text=text)
+    return entry
+
+
+#############################################################
 # WRITE TO LOG: log without glog which works poorly in python
 #############################################################
-    
+
 import os
 import sys
 
 def start_output(init=False):
+    """
+    Start stderr grabber
+    """
     out = OutputGrabber()
     out.start(init)
     return out
 
 def purge_output(out, log_name):
+    """
+    Stop and start stderr grabber in the same log file
+    """
     stop_output(out, log_name)
     new_out = start_output()
     return new_out
 
 def stop_output(out, log_name):
+    """
+    Stop stderr grabber and close files
+    """
     out.stop(log_name)
     pass
 
 class OutputGrabber(object):
     """
-    Class used to grab standard output or another stream.
+    Class used to grab stderr (default) or another stream
     """
     escape_char = "\b"
 
@@ -304,7 +315,7 @@ class OutputGrabber(object):
 
     def start(self, init=False):
         """
-        Start capturing the stream data.
+        Start capturing the stream data
         """
         self.capturedtext = ""
         # Save a copy of the stream
@@ -313,14 +324,14 @@ class OutputGrabber(object):
         os.dup2(self.pipe_in, self.origstreamfd)
         # Patch log file with time stamp on first line if initialization
         if init:
-            time_stamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y/%m/%d %H-%M-%S')
+            time_stamp = make_time_stamp('%Y/%m/%d %H-%M-%S')
             log_beginning = "Log file created at: {}\n".format(time_stamp)
             self.origstream.write(log_beginning)
         pass
 
     def stop(self, filename):
         """
-        Stop capturing the stream data and save the text in `capturedtext`.
+        Stop capturing the stream data and save the text in `capturedtext`
         """
         # Flush the stream to make sure all our data goes in before
         # the escape character.
@@ -341,7 +352,7 @@ class OutputGrabber(object):
     def readOutput(self):
         """
         Read the stream data (one byte at a time)
-        and save the text in `capturedtext`.
+        and save the text in `capturedtext`
         """
         while True:
             data = os.read(self.pipe_out, 1)  # Read One Byte Only
@@ -352,21 +363,20 @@ class OutputGrabber(object):
             self.capturedtext += data
         pass
 
-        
+
 #############################################################
 # MAIN
 #############################################################
 
 if __name__ == "__main__":
-    
+
     nets = [(net0, "net0"),
             (net1, "net1"),
             (net2, "net2")]
 
     # Time stamp
-    ts = time.time()
-    time_stamp = datetime.datetime.fromtimestamp(ts).strftime('%Y%m%d_%H%M%S')
-    
+    time_stamp = make_time_stamp('%Y%m%d_%H%M%S')
+
     # Path to lmdb
     fpath_train_db = db_path+"mnist_train_lmdb"
     fpath_test_db = db_path+"mnist_test_lmdb"

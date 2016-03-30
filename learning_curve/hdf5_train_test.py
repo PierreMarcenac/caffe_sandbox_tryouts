@@ -11,16 +11,21 @@ def silent_remove(filename):
     except OSError:
         pass
 
-# Scalar is transformed to a vector of length lg with a 1 at position scalar and zeros otherwise
 def vectorize(scalar, lg):
+    """
+    Scalar is transformed to a vector of length lg
+    with a 1 at position scalar and zeros otherwise
+    """
     vec = np.zeros(lg)
     vec[scalar] = 1
     return vec
 
 fpath_db = "/mnt/scratch/pierre/caffe_sandbox_tryouts/mnist/mnist_{0}_{1}/"
 
-# Make a copy of lmdb and vectorize labels to allow multi-label classification
 def make_hdf5(phase, size):
+    """
+    Make a copy of lmdb and vectorize labels to allow multi-label classification
+    """
     fpath_hdf5_phase = (fpath_db+"mnist_{0}.h5").format(phase, "hdf5")
     fpath_lmdb_phase = fpath_db.format(phase, "lmdb")
     # lmdb
@@ -50,8 +55,10 @@ def make_hdf5(phase, size):
     lmdb_env.close()
     pass
 
-# Net architecture to handle hdf5 inputs (use SigmoidCrossEntropyLoss)
 def net_hdf5(hdf5, batch_size):
+    """
+    Net architecture to handle hdf5 inputs (use SigmoidCrossEntropyLoss)
+    """
     n = caffe.NetSpec()
     n.data, n.label = L.HDF5Data(batch_size=batch_size, source=hdf5, ntop=2)
     n.conv1 = L.Convolution(n.data, kernel_size=5, num_output=50, weight_filler=dict(type='xavier'))
@@ -65,8 +72,7 @@ def net_hdf5(hdf5, batch_size):
     n.loss =  L.SigmoidCrossEntropyLoss(n.score, n.label)
     return n.to_proto()
 
-if __name__=="__main__":
-
+def main():
 # MAKE HDF5 DATABASE
     train_size = 60000
     test_size = 10000
@@ -107,5 +113,9 @@ if __name__=="__main__":
 
     # Solve neural net and write to log
     print "Start training"
-    train_test_net_python(solver_config_path, 10000, log_name, accuracy=True)
+    train_test_net_python(solver_config_path, 1000, log_name, accuracy=True)
     print "Stop training"
+    pass
+
+if __name__=="__main__":
+    main()
