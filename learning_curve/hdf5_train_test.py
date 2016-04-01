@@ -113,7 +113,7 @@ def main():
 
     # Solve neural net and write to log
     print "Start training"
-    train_test_net_python(solver_config_path, 1000, log_name, accuracy=True)
+    train_test_net_python(solver_config_path, 10000, log_name, accuracy=True)
     print "Stop training"
     pass
 

@@ -6,8 +6,8 @@ import numpy as np
 class TestROCCurve:
     def test_correct_classification(self):
         """
-        Test on known results for a simple optimal classification: verify that
-        the curve is optimal (iff area under the curve is 1)
+        Test on known results for a simple optimal classification:
+        verify that the curve is optimal (iff area under the curve is 1)
         """
         # Case of 3 classes which were correctly classified
         classes = range(3)
@@ -26,8 +26,8 @@ class TestROCCurve:
 
     def test_pos_label(self):
         """
-        Test the use of parameter post_label as opposed to using a binary
-        representation (0,1)
+        Test the use of parameter post_label as opposed
+        to using a binary representation (0,1)
         """
         # Binary implementation of metrics.roc_curve_
         def roc_curve_bin(y_true, y_score, classes):

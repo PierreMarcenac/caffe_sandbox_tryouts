@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 import caffe
 from caffe import layers as L, params as P
 from caffe.proto import caffe_pb2
-from accuracy import hamming_loss_test
+from accuracy import hamming_accuracy_test
 
 # Caffe Sandbox
 from eval.learning_curve import LearningCurve
@@ -189,7 +189,7 @@ def train_test_net_python(solver_config_path, niter, log_name, accuracy=False):
         if accuracy:
             if it % 100 == 0:
                 log_accuracy = log_entry("Test net output #1: accuracy = {}")
-                value_accuracy = 1-hamming_loss_test(solver)
+                value_accuracy = hamming_accuracy_test(solver)
                 sys.stderr.write(log_accuracy.format(value_accuracy))
         # Regularly print iteration
         if it % 100 == 0:
