@@ -2,6 +2,9 @@
 # ENVIRONMENT
 #############################################################
 
+import matplotlib
+matplotlib.use('Agg')
+
 # Location of Caffe and logging files and database
 caffe_root = "$CAFFE_ROOT/"
 caffe_path = "build/tools/caffe"
@@ -17,9 +20,12 @@ import logging
 import time, datetime
 
 # Setting log environment variables before importing caffe
+use_python = True
 os.environ["GLOG_minloglevel"] = "0"
-#os.environ["GLOG_log_dir"] = log_path # uncomment this line only if using glog
-os.environ["GLOG_logtostderr"] = "1" # uncomment this line only if using custom log
+if use_python:
+    os.environ["GLOG_logtostderr"] = "1" # only if using custom log
+else:
+    os.environ["GLOG_log_dir"] = log_path # only if using glog
 
 # Caffe
 import numpy as np
@@ -27,7 +33,7 @@ import matplotlib.pyplot as plt
 import caffe
 from caffe import layers as L, params as P
 from caffe.proto import caffe_pb2
-from accuracy import hamming_accuracy_test
+from accuracy import hamming_accuracy_test, hamming_accuracy_test_twoears
 
 # Caffe Sandbox
 from eval.learning_curve import LearningCurve
@@ -148,9 +154,13 @@ def make_solver(s, net_prefix, train_net_path, test_net_path, solver_config_path
     s.display = 10
     # Use GPU to train
     s.solver_mode = caffe_pb2.SolverParameter.GPU
+    # Snapshots
+    s.snapshot = 5000
+    s.snapshot_prefix = "snapshots/" + net_prefix + "_snapshot"
     # Write the solver to a temporary file and return its filename
     with open(solver_config_path, "w") as f:
         f.write(str(s))
+
 
 def train_test_net_command(solver_config_path):
     """
@@ -165,12 +175,12 @@ def train_test_net_command(solver_config_path):
                                                       solver=solver_config_path)
     subprocess.call(command, shell=True)
 
-def train_test_net_python(solver_config_path, niter, log_name, accuracy=False):
+def train_test_net_python(solver_config_path, niter, log_name, accuracy=False, debug=False):
     """
     Pythonic alternative to train/test process capturing stderr
     and logging it to a custom log file
     """
-    out = start_output(init=True) # comment this line for explicit debugging
+    out = start_output(debug, init=True)
     # Work on GPU and load solver
     caffe.set_device(0)
     caffe.set_mode_gpu()
@@ -187,18 +197,18 @@ def train_test_net_python(solver_config_path, niter, log_name, accuracy=False):
         solver.step(1)
         # Regularly compute accuracy on test set
         if accuracy:
-            if it % 100 == 0:
+            if it % 500 == 0: # should equal test_interval in solver's prototxt TODO: write method?
                 log_accuracy = log_entry("Test net output #1: accuracy = {}")
-                value_accuracy = hamming_accuracy_test(solver)
+                value_accuracy = hamming_accuracy_test_twoears(solver)
                 sys.stderr.write(log_accuracy.format(value_accuracy))
         # Regularly print iteration
         if it % 100 == 0:
             print "Iteration", it
         # Regularly purge stderr/output grabber
         if it % 1000 == 0:
-            out = purge_output(out, log_name)
+            out = purge_output(debug, out, log_name)
     # Break output stream and write to log
-    stop_output(out, log_name)
+    stop_output(debug, out, log_name)
 
 
 #############################################################
@@ -209,7 +219,7 @@ from pylab import rcParams
 rcParams['figure.figsize'] = 16, 6
 rcParams.update({'font.size': 15})
 
-def print_learning_curve(net_prefix, log_name, fig_name, inline=False):
+def print_learning_curve(net_prefix, log_name, fig_path, accuracy=True):
     """
     Print learning curve inline (for jupiter notebook) or by saving it
     """
@@ -228,21 +238,21 @@ def print_learning_curve(net_prefix, log_name, fig_name, inline=False):
         plt.ylabel('loss')
         plt.title(net_prefix+' on train and test sets')
         plt.legend()
-
-    plt.figure()
-    num_iter = e.list('NumIters', phase)
-    acc = e.list('accuracy', phase)
-    plt.plot(num_iter, acc, label=e.name())
-
-    plt.xlabel('iteration')
-    plt.ylabel('accuracy')
-    plt.title(net_prefix+" on %s set" % (phase.lower(),))
-    plt.legend(loc='lower right')
     plt.grid()
-    if inline:
-        plt.show()
-    else:
-        plt.savefig(fig_name)
+    plt.savefig(fig_path + net_prefix + "_learning_curve.png")
+
+    if accuracy:
+        plt.figure()
+        num_iter = e.list('NumIters', phase)
+        acc = e.list('accuracy', phase)
+        plt.plot(num_iter, acc, label=e.name())
+
+        plt.xlabel('iteration')
+        plt.ylabel('accuracy')
+        plt.title(net_prefix+" on %s set" % (phase.lower(),))
+        plt.legend(loc='lower right')
+        plt.grid()
+        plt.savefig(fig_path + net_prefix + "_accuracy.png")
 
 
 #############################################################
@@ -276,27 +286,34 @@ def log_entry(text):
 import os
 import sys
 
-def start_output(init=False):
+def start_output(debug, init=False):
     """
     Start stderr grabber
     """
-    out = OutputGrabber()
-    out.start(init)
-    return out
+    if not debug:
+        out = OutputGrabber()
+        out.start(init)
+        return out
+    else:
+        return None
 
-def purge_output(out, log_name):
+def purge_output(debug, out, log_name):
     """
     Stop and start stderr grabber in the same log file
     """
-    stop_output(out, log_name)
-    new_out = start_output()
-    return new_out
+    if not debug:
+        stop_output(debug, out, log_name)
+        new_out = start_output(debug)
+        return new_out
+    else:
+        return None
 
-def stop_output(out, log_name):
+def stop_output(debug, out, log_name):
     """
     Stop stderr grabber and close files
     """
-    out.stop(log_name)
+    if not debug:
+        out.stop(log_name)
     pass
 
 class OutputGrabber(object):
