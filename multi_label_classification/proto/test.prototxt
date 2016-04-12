@@ -4,8 +4,8 @@ layer {
   top: "data"
   top: "label"
   hdf5_data_param {
-    source: "/mnt/scratch/pierre/caffe-sandbox/mnist/mnist_train_hdf5/h5list"
-    batch_size: 64
+    source: "db/test.txt"
+    batch_size: 100
   }
 }
 layer {
@@ -15,7 +15,7 @@ layer {
   top: "conv1"
   convolution_param {
     num_output: 50
-    kernel_size: 5
+    kernel_size: 1
     weight_filler {
       type: "xavier"
     }
@@ -45,7 +45,7 @@ layer {
   top: "conv2"
   convolution_param {
     num_output: 50
-    kernel_size: 5
+    kernel_size: 1
     weight_filler {
       type: "xavier"
     }
@@ -86,7 +86,7 @@ layer {
   bottom: "fc1"
   top: "score"
   inner_product_param {
-    num_output: 10
+    num_output: 12
     weight_filler {
       type: "xavier"
     }
@@ -98,4 +98,10 @@ layer {
   bottom: "score"
   bottom: "label"
   top: "loss"
+}
+layer {
+  name: "sigmoid"
+  type: "Sigmoid"
+  bottom: "score"
+  top: "sigmoid"
 }

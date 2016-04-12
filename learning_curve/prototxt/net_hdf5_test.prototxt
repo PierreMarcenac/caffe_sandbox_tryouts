@@ -4,8 +4,8 @@ layer {
   top: "data"
   top: "label"
   hdf5_data_param {
-    source: "/mnt/scratch/pierre/caffe_sandbox_tryouts/mnist/mnist_test_hdf5/h5list"
-    batch_size: 100
+    source: "/mnt/scratch/pierre/caffe-sandbox/mnist/mnist_test_hdf5/h5list"
+    batch_size: 1
   }
 }
 layer {

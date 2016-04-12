@@ -1,0 +1,2 @@
+/mnt/antares_raid/home/pierre/masterarbeit/caffe-sandbox/multi_label_classification/db/train.h5
+

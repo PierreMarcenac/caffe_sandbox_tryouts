@@ -33,12 +33,12 @@ import matplotlib.pyplot as plt
 import caffe
 from caffe import layers as L, params as P
 from caffe.proto import caffe_pb2
-from accuracy import hamming_accuracy_test, hamming_accuracy_test_twoears
+from accuracy import hamming_accuracy_from_net
 
 # Caffe Sandbox
-from eval.learning_curve import LearningCurve
-from eval.eval_utils import Phase
-import eval.log_utils as lu
+from nideep.eval.learning_curve import LearningCurve
+from nideep.eval.eval_utils import Phase
+import nideep.eval.log_utils as lu
 
 #############################################################
 # DATA
@@ -187,28 +187,28 @@ def train_test_net_python(solver_config_path, niter, log_name, accuracy=False, d
     solver = None
     solver = caffe.get_solver(solver_config_path)
     # Log solving
-    log_solving = log_entry("Solving")
-    sys.stderr.write(log_solving)
-
-    y_true, y_pred = [], []
+    log_entry(debug, out, "Solving")
 
     for it in range(niter):
         # Iterate
         solver.step(1)
+
         # Regularly compute accuracy on test set
         if accuracy:
             if it % 500 == 0: # should equal test_interval in solver's prototxt TODO: write method?
-                log_accuracy = log_entry("Test net output #1: accuracy = {}")
-                value_accuracy = hamming_accuracy_test_twoears(solver)
-                sys.stderr.write(log_accuracy.format(value_accuracy))
+                value_accuracy = hamming_accuracy_from_net(solver.test_nets[0], 'label', 'score')
+                log_entry(debug, out, "Test net output #1: accuracy = {}".format(value_accuracy))
+
         # Regularly print iteration
         if it % 100 == 0:
             print "Iteration", it
+
         # Regularly purge stderr/output grabber
         if it % 1000 == 0:
             out = purge_output(debug, out, log_name)
     # Break output stream and write to log
     stop_output(debug, out, log_name)
+    pass
 
 
 #############################################################
@@ -266,17 +266,21 @@ def make_time_stamp(pattern):
     now = time.time()
     return datetime.datetime.fromtimestamp(now).strftime(pattern)
 
-def log_entry(text):
+def log_entry(debug, out, text):
     """
     Standardized log entries for glog
     """
+    # Format log entry
     monthday = make_time_stamp('%m%d')
     time_stamp = make_time_stamp('%H:%M:%S')
     now = time.time()
     ms = "."+str('%06d' % int((now - int(now)) * 1000000))
     line_form = "I{monthday} {time_stamp}  0000 main.py:00] {text}\n"
     entry = line_form.format(monthday=monthday, time_stamp=time_stamp+ms, text=text)
-    return entry
+
+    # Log entry to out
+    write_output(debug, out, entry)
+    pass
 
 
 #############################################################
@@ -294,8 +298,12 @@ def start_output(debug, init=False):
         out = OutputGrabber()
         out.start(init)
         return out
-    else:
-        return None
+    return None
+
+def write_output(debug, out, entry):
+    if not debug:
+        out.write(entry)
+    pass
 
 def purge_output(debug, out, log_name):
     """
@@ -305,8 +313,7 @@ def purge_output(debug, out, log_name):
         stop_output(debug, out, log_name)
         new_out = start_output(debug)
         return new_out
-    else:
-        return None
+    return None
 
 def stop_output(debug, out, log_name):
     """
@@ -344,6 +351,10 @@ class OutputGrabber(object):
             time_stamp = make_time_stamp('%Y/%m/%d %H-%M-%S')
             log_beginning = "Log file created at: {}\n".format(time_stamp)
             self.origstream.write(log_beginning)
+        pass
+
+    def write(self, entry):
+        self.origstream.write(entry)
         pass
 
     def stop(self, filename):

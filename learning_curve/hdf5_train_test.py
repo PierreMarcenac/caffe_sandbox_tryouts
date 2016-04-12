@@ -20,7 +20,7 @@ def vectorize(scalar, lg):
     vec[scalar] = 1
     return vec
 
-fpath_db = "/mnt/scratch/pierre/caffe_sandbox_tryouts/mnist/mnist_{0}_{1}/"
+fpath_db = "/mnt/scratch/pierre/caffe-sandbox/mnist/mnist_{0}_{1}/"
 
 def make_hdf5(phase, size):
     """
@@ -108,12 +108,12 @@ def main():
     with open(train_net_path, "w") as f:
         f.write(str(net_hdf5(fpath_train_list, 64)))
     with open(test_net_path, "w") as f:
-        f.write(str(net_hdf5(fpath_test_list, 100)))
+        f.write(str(net_hdf5(fpath_test_list, 1)))
     make_solver(s, net_prefix, train_net_path, test_net_path, solver_config_path)
 
     # Solve neural net and write to log
     print "Start training"
-    train_test_net_python(solver_config_path, 10000, log_name, accuracy=True)
+    train_test_net_python(solver_config_path, 500, log_name, accuracy=True, debug=True)
     print "Stop training"
     pass
 
