@@ -161,7 +161,6 @@ def make_solver(s, net_prefix, train_net_path, test_net_path, solver_config_path
     with open(solver_config_path, "w") as f:
         f.write(str(s))
 
-
 def train_test_net_command(solver_config_path):
     """
     Train/test process launching cpp files from shell
@@ -208,7 +207,7 @@ def train_test_net_python(solver_config_path, niter, log_name, accuracy=False, d
             out = purge_output(debug, out, log_name)
     # Break output stream and write to log
     stop_output(debug, out, log_name)
-    pass
+    return (time.time() - start_time) < 30
 
 
 #############################################################
