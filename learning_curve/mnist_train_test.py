@@ -179,6 +179,7 @@ def train_test_net_python(solver_config_path, niter, log_name, accuracy=False, d
     Pythonic alternative to train/test process capturing stderr
     and logging it to a custom log file
     """
+    start_time = time.time()
     out = start_output(debug, init=True)
     # Work on GPU and load solver
     caffe.set_device(0)
