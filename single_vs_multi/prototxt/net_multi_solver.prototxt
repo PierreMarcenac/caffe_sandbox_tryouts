@@ -1,0 +1,17 @@
+train_net: "prototxt/net_multi_train.prototxt"
+test_net: "prototxt/net_multi_test.prototxt"
+test_iter: 100
+test_interval: 100
+base_lr: 0.01
+display: 10
+max_iter: 10000
+lr_policy: "inv"
+gamma: 0.0001
+power: 0.75
+momentum: 0.9
+weight_decay: 0.0005
+snapshot: 10000 
+snapshot_prefix: "snaps/net_multi_snapshot"
+solver_mode: GPU
+random_seed: 831486
+type: "Nesterov"

@@ -27,15 +27,14 @@ if use_python:
 else:
     os.environ["GLOG_log_dir"] = log_path # only if using glog
 
-# Caffe
+# python and caffe
 import numpy as np
 import matplotlib.pyplot as plt
 import caffe
 from caffe import layers as L, params as P
 from caffe.proto import caffe_pb2
-from accuracy import hamming_accuracy_from_net
 
-# Caffe Sandbox
+# nideep
 from nideep.eval.learning_curve import LearningCurve
 from nideep.eval.eval_utils import Phase
 import nideep.eval.log_utils as lu
@@ -163,7 +162,7 @@ def make_solver(s, net_prefix, train_net_path, test_net_path, solver_config_path
 
 def train_test_net_command(solver_config_path):
     """
-    Train/test process launching cpp files from shell
+    Train/test process launching cpp solver from shell.
     """
     # Load solver
     solver = None
@@ -174,41 +173,67 @@ def train_test_net_command(solver_config_path):
                                                       solver=solver_config_path)
     subprocess.call(command, shell=True)
 
-def train_test_net_python(solver_config_path, niter, log_name, accuracy=False, debug=False):
+def train_test_net_python(solver_path, log_path, accuracy=False, print_every=100, debug=False):
     """
-    Pythonic alternative to train/test process capturing stderr
-    and logging it to a custom log file
+    Pythonic alternative to train/test a network:
+    it captures stderr and logs it to a custom log file.
+
+    Errors in C can't be seen in python, so use subprocess.call
+    to see if the script terminated.
+
+	solver_path		- str - Path to the solver's prototxt.
+	log_path		- str - Path to the log file.
+	accuracy		- boolean - Compute accuracy?
+	print_every		- int - Prints indications to the command line every print_every iteration.
+	debug			- boolean - Activate debugging? If True, log won't be captured.
     """
+    from sklearn.metrics import recall_score, accuracy_score
     start_time = time.time()
     out = start_output(debug, init=True)
+    # Get useful parameters from prototxts
+    max_iter = get_prototxt_parameter("max_iter", solver_path)
+    test_interval = get_prototxt_parameter("test_interval", solver_path)
     # Work on GPU and load solver
     caffe.set_device(0)
     caffe.set_mode_gpu()
     solver = None
-    solver = caffe.get_solver(solver_config_path)
+    solver = caffe.get_solver(solver_path)
     # Log solving
     log_entry(debug, out, "Solving")
 
-    for it in range(niter):
+    for it in range(max_iter):
         # Iterate
         solver.step(1)
 
         # Regularly compute accuracy on test set
         if accuracy:
-            if it % 500 == 0: # should equal test_interval in solver's prototxt TODO: write method?
-                value_accuracy = hamming_accuracy_from_net(solver.test_nets[0], 'label', 'score')
+            if it % test_interval == 0:
+                solver.test_nets[0].forward()
+                # retrieve labels and predictions
+                y_true = solver.test_nets[0].blobs['label'].data
+                y_prob = solver.test_nets[0].blobs['score'].data
+                # reshape labels and predictions
+                y_true = np.squeeze(y_true)
+                y_prob = np.squeeze(y_prob)
+                if y_true.ndim == 1:
+                    n = y_true.shape[0]
+                    y_true.reshape(1, n)
+                    y_prob.reshape(1, n)
+                y_pred = np.array([[prob>=0.5 for prob in preds] for preds in y_prob])
+                value_accuracy = accuracy_score(y_true, y_pred)
+                #value_accuracy = recall_score(y_true, y_pred, average='macro')
                 log_entry(debug, out, "Test net output #1: accuracy = {}".format(value_accuracy))
 
         # Regularly print iteration
-        if it % 100 == 0:
+        if it % print_every == 0:
             print "Iteration", it
 
         # Regularly purge stderr/output grabber
         if it % 1000 == 0:
-            out = purge_output(debug, out, log_name)
+            out = purge_output(debug, out, log_path)
     # Break output stream and write to log
-    stop_output(debug, out, log_name)
-    return (time.time() - start_time) < 30
+    stop_output(debug, out, log_path)
+    pass
 
 
 #############################################################
@@ -219,11 +244,11 @@ from pylab import rcParams
 rcParams['figure.figsize'] = 16, 6
 rcParams.update({'font.size': 15})
 
-def print_learning_curve(net_prefix, log_name, fig_path, accuracy=True):
+def print_learning_curve(net_prefix, log_path, fig_path, accuracy=True):
     """
     Print learning curve inline (for jupiter notebook) or by saving it
     """
-    e = LearningCurve(log_name)
+    e = LearningCurve(log_path)
     e.parse()
 
     for phase in [Phase.TRAIN, Phase.TEST]:
@@ -261,7 +286,8 @@ def print_learning_curve(net_prefix, log_name, fig_path, accuracy=True):
 
 def make_time_stamp(pattern):
     """
-    Time stamp with explicit string pattern
+    Time stamp with explicit string pattern.
+	A possible pattern would be '%Y%m%d_%H%M%S'.
     """
     now = time.time()
     return datetime.datetime.fromtimestamp(now).strftime(pattern)
@@ -281,6 +307,15 @@ def log_entry(debug, out, text):
     # Log entry to out
     write_output(debug, out, entry)
     pass
+
+def get_prototxt_parameter(param, prototxt):
+    with open(prototxt) as f:
+        try:
+            line = [s for s in f.readlines() if param in s][-1]
+            param_value = int(line.rstrip().split(": ")[1].split("#")[0])
+        except IndexError:
+            print "{} not defined in prototxt {} or bad layout.".format(param, prototxt)
+    return param_value
 
 
 #############################################################
@@ -305,22 +340,22 @@ def write_output(debug, out, entry):
         out.write(entry)
     pass
 
-def purge_output(debug, out, log_name):
+def purge_output(debug, out, log_path):
     """
     Stop and start stderr grabber in the same log file
     """
     if not debug:
-        stop_output(debug, out, log_name)
+        stop_output(debug, out, log_path)
         new_out = start_output(debug)
         return new_out
     return None
 
-def stop_output(debug, out, log_name):
+def stop_output(debug, out, log_path):
     """
     Stop stderr grabber and close files
     """
     if not debug:
-        out.stop(log_name)
+        out.stop(log_path)
     pass
 
 class OutputGrabber(object):
@@ -412,7 +447,7 @@ if __name__ == "__main__":
     for (net, net_prefix) in nets:
         # Log/fig names with time stamp
         process_name = net_prefix + "_" + time_stamp
-        log_name = log_path + "caffe_" + process_name + ".log"
+        log_path = log_path + "caffe_" + process_name + ".log"
         fig_name = fig_path + process_name + ".png"
         print "Training process:", process_name
 
@@ -426,4 +461,4 @@ if __name__ == "__main__":
 
         # Solve neural net and write to log (uncomment command or python)
         # train_test_net_command_command(solver_config_path)
-        train_test_net_python(solver_config_path, 1000, log_name, accuracy=False)
+        train_test_net_python(solver_config_path, 1000, log_path, accuracy=False)
